@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Audio Converter</title>
+    <style>
+        body { padding: 20px; font-family: Arial, sans-serif; }
+        #messages { 
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .message { margin: 5px 0; }
+        .sent { color: blue; }
+        .received { color: green; }
+        .error { color: red; }
+        .download-link {
+            color: #0066cc;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h2>WebSocket Audio Converter</h2>
+    <div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <span id="status">Disconnected</span>
+    </div>
+    <div>
+        <input type="file" id="fileInput" accept="audio/*">
+        <button onclick="sendFile()">Send File</button>
+    </div>
+    <div id="messages"></div>
+
+    <script>
+        let ws;
+
+        function connect() {
+            ws = new WebSocket('ws://localhost:8080/ws/convert');
+            
+            ws.onopen = () => {
+                document.getElementById('status').textContent = 'Connected';
+                logMessage('Connected to server', 'system');
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('status').textContent = 'Disconnected';
+                logMessage('Disconnected from server', 'system');
+            };
+            
+            ws.onmessage = async (event) => {
+                if (event.data instanceof Blob) {
+                    const blob = event.data;
+                    const originalFileName = document.getElementById('fileInput').files[0]?.name || 'audio';
+                    const baseFileName = originalFileName.split('.')[0];
+                    const downloadFileName = `${baseFileName}_converted.mp3`;
+                    
+                    // Create download link
+                    const url = URL.createObjectURL(blob);
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = url;
+                    downloadLink.download = downloadFileName;
+                    downloadLink.className = 'download-link';
+                    downloadLink.textContent = `Click to download ${downloadFileName}`;
+                    
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'message received';
+                    messageDiv.appendChild(downloadLink);
+                    document.getElementById('messages').appendChild(messageDiv);
+                    
+                    logMessage(`Received converted file (${(blob.size / 1024).toFixed(2)} KB)`, 'received');
+                } else {
+                    logMessage('Received: ' + event.data, 'received');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                logMessage('Error: ' + error.message, 'error');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function sendFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file first');
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect to the server first');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                ws.send(e.target.result);
+                logMessage(`Sent file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`, 'sent');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function logMessage(message, type) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = message;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+    </script>
+</body>
+</html>
